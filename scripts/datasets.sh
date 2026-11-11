@@ -1,4 +1,4 @@
-# Sourced by the run scripts: dataset and backbone lists from uqbench/configs/benchmark.yaml.
+# Sourced by the run scripts: dataset and backbone lists from configs/benchmark.yaml.
 #   sets        generated datasets of the test sets and training pools (test sets in `test_union` expand to parts)
 #   backbones   the reported backbones
 source scripts/environment.sh

@@ -1,12 +1,13 @@
 """Per-question view joining generations, replay features, follow-up probes and answer clusters.
 
-This is the only interface baselines see: each :class:`Question` holds the K sampled responses of
+This is the only interface estimators see: each :class:`Question` holds the K sampled responses of
 one problem together with everything observed about them at inference time. Gold answers are
 kept only in ``labels`` (used for training/evaluation, never by a scorer).
 """
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -46,6 +47,11 @@ class Question:
     def responses(self) -> list[str]:
         """Final responses after ``</think>`` (empty when the trace was cut off)."""
         return [s["response"] if "response" in s else split_thinking(s["text"])[1] for s in self.samples]
+
+
+def labels_of(questions: Iterable[Question]) -> np.ndarray:
+    """Correctness labels of every response, concatenated in question order."""
+    return np.concatenate([q.labels for q in questions])
 
 
 def _clusters(model: str, dataset: str, rows: list[dict]) -> dict[str, list[int]]:
@@ -101,26 +107,8 @@ def load_generated(model: str, dataset: str, with_replay: bool = True, with_foll
     return out
 
 
-def merge_runs(model: str, extra: str, dataset: str, **kw) -> list[Question]:
-    """Questions of ``model`` with the responses of an independent run ``extra`` appended (same
-    questions, independent seeds; only the questions ``extra`` sampled); answer clusters are recomputed over all
-    responses."""
-    base = {q.uid: q for q in load_questions(model, dataset, **kw)}
-    both = lambda a, b: a + b if a and b else []  # noqa: E731  (a signal one run lacks, e.g. energy, is dropped)
-    out = []
-    for q2 in load_questions(extra, dataset, partial=True, **kw):
-        q1 = base.get(q2.uid)
-        if q1 is None:
-            continue
-        samples = q1.samples + q2.samples
-        out.append(replace(q1, samples=samples, labels=np.concatenate([q1.labels, q2.labels]),
-                           clusters=cluster_answers([s["pred"] for s in samples], q1.task, q1.uid),
-                           replay=both(q1.replay, q2.replay), followup=both(q1.followup, q2.followup),
-                           reward=both(q1.reward, q2.reward), energy=both(q1.energy, q2.energy)))
-    return out
-
 
 def load_pool(model: str, **kw) -> list[Question]:
-    """The training pool: the questions of every pool in ``uqbench/configs/benchmark.yaml: training_pools``."""
+    """The training pool: the questions of every pool in ``configs/benchmark.yaml: training_pools``."""
     bench = load_yaml("benchmark")
     return [q for name in bench["training_pools"] for q in load_questions(model, name, **kw)]

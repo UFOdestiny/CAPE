@@ -1,6 +1,7 @@
 """Read persisted inference signals without importing pipeline execution modules.
 
-The NPZ and JSONL schemas are shared with the writers in uqbench.pipeline.
+The NPZ and JSONL schemas are shared with the writers of the GPU stages (replay in uqbench.pipeline; energy,
+follow-up and reward signals of the optional baselines).
 """
 from __future__ import annotations
 

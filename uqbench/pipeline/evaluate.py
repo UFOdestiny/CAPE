@@ -1,6 +1,7 @@
-"""CPU stage: fit baselines on the training pool, score the frozen test sets, report metrics.
+"""CPU stage: fit CAPE (and the baselines, when ``baselines/`` is present) on the training pool, score the frozen
+test sets, report metrics.
 
-Protocol (docs/protocol.md): learned parts and hyper-parameters use the pool's train/val
+Protocol: learned parts and hyper-parameters use the pool's train/val
 split only. Brier/ECE use a calibration map chosen on the validation pool: Platt for score-valued
 methods; for probability-valued methods the native probabilities unless 2-fold cross-fitted Platt
 has lower validation NLL (raw Brier/ECE are reported as well); test sets
@@ -14,20 +15,19 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 from dataclasses import replace
 
 import numpy as np
 import pandas as pd
 
-import baselines
-from baselines.base import labels_of
 from cape import CAPE, CoherentProjection
 from uqbench import metrics
 from uqbench.calibration import Identity, select_calibrator
 from uqbench.config import RESULTS_DIR, load_yaml, scores_dir
 from uqbench.diagnostics import certificate, null_mass_rows, structure_stats
-from uqbench.records import load_pool, load_questions
+from uqbench.records import labels_of, load_pool, load_questions
 
 MATH_SETS = tuple(load_yaml("benchmark")["math_sets"])   # pooled into math_all
 CI_METRICS = ("auroc", "brier", "ece")
@@ -37,13 +37,30 @@ CALIBRATION: dict[str, str] = {}   # method -> calibration map chosen on the val
 VAL_QUESTIONS: list = []   # validation pool, kept for post-hoc decision analyses
 
 
+def baselines_package():
+    """The optional ``baselines`` package (imported lazily), or None with a one-line notice when it is absent."""
+    try:
+        return importlib.import_module("baselines")
+    except ModuleNotFoundError as err:
+        if err.name != "baselines":
+            raise
+        print("[evaluate] baselines/ not found: evaluating CAPE only", flush=True)
+        return None
+
+
+def optional_baselines() -> list:
+    """The compared estimators (``baselines.build_all``), or none when ``baselines/`` is absent."""
+    registry = baselines_package()
+    return registry.build_all() if registry is not None else []
+
+
 def fit_methods(model: str) -> tuple[list, dict]:
-    """Fit baselines (and our method) on the training pool; return methods and their calibration maps."""
+    """Fit the baselines (if present) and CAPE on the training pool; return methods and their calibration maps."""
     pool = load_pool(model)
     train = [q for q in pool if q.split == "train"]
     val = [q for q in pool if q.split == "val"]
     VAL_QUESTIONS[:] = val
-    methods = baselines.build_all()
+    methods = optional_baselines()
     for b in methods:
         b.fit(train, val)
         print(f"[evaluate] fitted {b.name}: {b.describe()}", flush=True)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Every stage for one backbone: GPU stages, LLM-assisted labels, CPU analyses.
+# Every stage for one backbone: GPU stages, LLM-assisted labels, CPU evaluation.
 # Usage: bash scripts/run_benchmark.sh <model> [gpus=0,1,2,3]
 set -euo pipefail
 cd "$(dirname "$0")/.."

@@ -32,7 +32,7 @@ from pathlib import Path
 from uqbench.config import load_yaml, run_dir
 from uqbench.io import read_jsonl, write_jsonl
 from uqbench.pipeline import data
-from uqbench.pipeline.followup import VERBAL_CLASSES, VERBAL_PROMPT, parse_verbal
+from uqbench.verbal import VERBAL_CLASSES, VERBAL_PROMPT, parse_verbal
 from uqbench.verify import extract_answer, is_correct
 
 MODEL = "claude-haiku-5-5"
@@ -65,8 +65,7 @@ VERBAL_SCHEMA = {"type": "object", "additionalProperties": False, "required": ["
 
 
 def verbal_params(record: dict, response: str) -> dict:
-    """The LRMVerbal two-turn proxy of ``uqbench.pipeline.followup``: the finished response, then the confidence
-    question,
+    """The LRMVerbal two-turn proxy (``uqbench.verbal``): the finished response, then the confidence question,
     answered with thinking off."""
     return {"model": MODEL, "max_tokens": 64, "thinking": {"type": "disabled"},
             "output_config": {"format": {"type": "json_schema", "schema": VERBAL_SCHEMA}},
@@ -286,9 +285,9 @@ def blocked_as_refusal(r: dict | None) -> dict | None:
 
 def merge(args) -> None:
     """Generation records in the format of ``uqbench.pipeline.generate`` (questions with all K responses only) and the
-    verbal follow-ups in the format of ``uqbench.pipeline.followup``. With ``--partial`` (pipeline tests on the
-    pilot), each
-    question keeps the responses it has and the output goes to ``OUTPUT_DIR/<MODEL>-pilot``."""
+    verbal follow-ups in the follow-up format that ``uqbench.records`` reads (``followup/_shards``). With
+    ``--partial`` (pipeline tests on the pilot), each question keeps the responses it has and the output goes to
+    ``OUTPUT_DIR/<MODEL>-pilot``."""
     res = results()
     root = run_dir(MODEL + "-pilot") if args.partial else ROOT
     for name in datasets():

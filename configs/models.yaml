@@ -10,7 +10,7 @@
 #   seed_offset       optional offset of the per-question sampling seeds (independent extra samples)
 #   prefix            optional {of, fraction}: shared-prefix sampling (uqbench.pipeline.generate.shared_prefixes)
 
-# --- Backbones reported in the paper (uqbench/configs/benchmark.yaml: backbones) ---
+# --- Backbones reported in the paper (configs/benchmark.yaml: backbones) ---
 qwen3-8b:
   name: Qwen3-8B
   hf_id: Qwen/Qwen3-8B
@@ -37,7 +37,7 @@ gpt-oss-20b:
   reasoning_format: harmony
   replay: {attn_implementation: eager, chunk: 2048} # attention sinks: no flash-attention kernel
 
-# --- Second sampling run of Qwen3-8B (responses 9-16 of the K = 16 study, uqbench.studies.kscale) ---
+# --- Second sampling run of Qwen3-8B (responses 9-16 of the K = 16 study) ---
 qwen3-8b-x8:
   name: Qwen3-8B (seed 2)
   hf_id: Qwen/Qwen3-8B
@@ -48,7 +48,7 @@ qwen3-8b-x8:
   reasoning_format: think
   seed_offset: 1000000
 
-# --- Shared-prefix sampling (dependence study, uqbench.studies.dependence): every response continues
+# --- Shared-prefix sampling (dependence intervention): every response continues
 # the first response of the `of` run after `fraction` x the median length of its other responses (an exact model sample) ---
 qwen3-8b-pf25: &prefix
   name: Qwen3-8B (shared prefix 25%)

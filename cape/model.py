@@ -1,4 +1,4 @@
-"""CAPE — Coherent Answer Posterior Estimation (docs/method.md).
+"""CAPE — Coherent Answer Posterior Estimation (paper: "CAPE: Joint Outcome Estimation").
 
 Answer model. For a question with K responses grouped into answer clusters c = 1..m, an answer
 model is a conditional logit over "cluster c holds the correct answer" and an outside option ∅
@@ -38,19 +38,13 @@ import itertools
 
 import numpy as np
 
-from baselines.base import Baseline, labels_of
-from baselines.cdg import dynamics
-from baselines.deepconf import trace_confidence
+from cape.features import FEATURES, scalar_features
+from uqbench.estimator import Estimator
+from uqbench.records import labels_of
 
 L2_GRID = (1e-4, 1e-3, 1e-2, 1e-1)
 EPOCHS, LR, SEED = 400, 0.05, 0
 
-CORE_FEATURES = ["self_certainty", "entropy", "mean_logprob", "deepconf_bottom10", "deepconf_tail", "cdg_gain",
-                 "log_length", "trace_closed", "ptrue_logodds", "verbal_conf"]
-TRACE_FEATURES = ["answer_logprob", "answer_min_logprob", "answer_entropy", "answer_tokens", "tail_entropy",
-                  "tail_self_certainty", "tail_logprob", "head_entropy", "deepconf_lowest", "deepconf_mean",
-                  "low_prob_fraction", "entropy_q90"]
-FEATURES = CORE_FEATURES + TRACE_FEATURES   # every single-trace statistic (controls and ablations)
 PROBE_COMPONENTS, PROBE_FOLDS, PROBE_C = 256, 5, (1e-3, 1e-2, 1e-1, 1.0)
 # probe sites (replayed position, relative depth): position 0 = last token of the final answer, 1 = end of the
 # reasoning block (see uqbench.pipeline.replay)
@@ -60,44 +54,8 @@ SUPPORT_ALPHA = 0.05
 _PROBE_IDS = itertools.count()   # unique per probe; id() can be reused once a probe is garbage-collected
 
 
-def trace_statistics(r: dict) -> list[float]:
-    """Final-answer segment (after the reasoning block), last/first 10% of the trace, whole-trace tails."""
-    lp, ent, sc, conf = r["chosen_lp"], r["entropy"], r["self_certainty"], r["conf_topk"]
-    n = len(lp)
-    end = min(max(int(r["positions"]["think_end"]), 0), n)
-    seg = slice(end, n) if n - end >= 2 else slice(max(n - 32, 0), n)
-    tail, head = slice(int(n * 0.9), n), slice(0, max(int(n * 0.1), 1))
-    return [float(lp[seg].mean()), float(lp[seg].min()), float(ent[seg].mean()), float(n - end),
-            float(ent[tail].mean()), float(sc[tail].mean()), float(lp[tail].mean()), float(ent[head].mean()),
-            trace_confidence(conf, "lowest"), trace_confidence(conf, "mean"),
-            float((lp < np.log(0.1)).mean()), float(np.quantile(ent, 0.9))]
-
-
-def scalar_features(q) -> np.ndarray:
-    """(K, len(FEATURES)) single-trace features, memoised on the Question object (window statistics
-    over long traces are expensive; subsets are new objects, so they never share a cache)."""
-    cached = getattr(q, "_cape_features", None)
-    if cached is not None:
-        return cached
-    rows = []
-    for s, r, f in zip(q.samples, q.replay, q.followup, strict=True):
-        conf = r["conf_topk"]
-        lp1 = f["ptrue_logp1"] if f["ptrue_logp1"] is not None else -20.0
-        lp0 = f["ptrue_logp0"] if f["ptrue_logp0"] is not None else -20.0
-        rows.append([
-            float(r["self_certainty"].mean()), float(r["entropy"].mean()), float(r["chosen_lp"].mean()),
-            trace_confidence(conf, "bottom10"), trace_confidence(conf, "tail"), dynamics(conf)[1],
-            float(np.log(r["length"])), float(s["closed"]), lp1 - lp0,
-            f["verbal_conf"] if f["verbal_conf"] is not None else 0.5,
-            *trace_statistics(r),
-        ])
-    out = np.array(rows, dtype=np.float64)
-    q._cape_features = out
-    return out
-
-
 def judge_evidence(q) -> tuple[np.ndarray, float]:
-    """Answer-set judge (``uqbench.pipeline.judge``, attached as ``q.judge``): normalised log-probability of
+    """Answer-set judge (ablation; its verdict is attached as ``q.judge``): normalised log-probability of
     each response's own answer cluster (floor -20 for unanswered or unlisted) and of "none correct"."""
     j = getattr(q, "judge", None)
     if not j:
@@ -107,13 +65,6 @@ def judge_evidence(q) -> tuple[np.ndarray, float]:
     own = dict(zip(j["clusters"], lp[:-1], strict=True))
     per = [own.get(c, -20.0) if s["pred"] is not None else -20.0 for c, s in zip(q.clusters, q.samples, strict=True)]
     return np.maximum(np.array(per), -20.0), float(lp[-1])
-
-
-def hidden_features(q) -> np.ndarray:
-    """Answer-position hidden states of a middle and the last stored layer, concatenated."""
-    layers = q.replay[0]["hidden"].shape[1]
-    picks = [layers // 2, layers - 1]
-    return np.stack([np.concatenate([r["hidden"][0, j] for j in picks]) for r in q.replay]).astype(np.float32)
 
 
 def probe_features(q) -> np.ndarray:
@@ -215,7 +166,8 @@ class AnswerModel:
 
     # ---------- features ----------
     def _features(self, q) -> np.ndarray:
-        x = scalar_features(q)[:, self.columns]
+        # trace statistics only when an ablation asks for them (they need the follow-up probes)
+        x = scalar_features(q)[:, self.columns] if self.columns else np.zeros((q.k, 0))
         if self.probe is not None:
             s = self.probe.logits(q)[:, None]
             x = np.concatenate([x, s], axis=1)
@@ -373,7 +325,7 @@ class AnswerModel:
                 "val_nll": self.val_nll}
 
 
-class CAPE(Baseline):
+class CAPE(Estimator):
     paper = "ours"
     probabilistic = True
 

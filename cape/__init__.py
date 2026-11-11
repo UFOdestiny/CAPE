@@ -1,5 +1,5 @@
-"""CAPE (Coherent Answer Posterior Estimation) and the coherent projection (see docs/method.md)."""
-from cape.coherence import CoherentProjection, project_coherent
+"""CAPE (Coherent Answer Posterior Estimation) and the projection onto the coherent set."""
 from cape.model import CAPE
+from cape.projection import CoherentProjection, project_coherent
 
 __all__ = ["CAPE", "CoherentProjection", "project_coherent"]

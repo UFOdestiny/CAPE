@@ -1,17 +1,41 @@
-__pycache__/
-*.py[cod]
+# Private parts of the research code (not released)
+/baselines/
+/analysis/
+/visualization/
+/docs/
+/notes/
+/latex/
+/MySKILL/
+
+# Data, weights and outputs (paths come from .env)
+/models
+/datasets/
+/outputs/
+/results/
+/artifacts/
+/logs/
+/data/
+/store
+*.log
+slurm-*.out
+
+# Credentials
 .env
 .env.*
 !.env.example
+
+# Caches
+__pycache__/
+*.py[cod]
+.cache/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Editor and agent folders
 .vscode/
+.idea/
 .claude/
 .agents/
-/datasets/
-/models
-/results/
-/artifacts/
-*.log
-/latex/
-/docs/paper/
-/notes/
-/MySKILL/
+.codex/

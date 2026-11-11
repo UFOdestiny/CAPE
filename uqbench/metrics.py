@@ -53,15 +53,10 @@ def nll(prob, labels) -> float:
     return float(-np.mean(labels * np.log(p) + (1 - labels) * np.log(1 - p)))
 
 
-def ece(prob, labels, n_bins: int = 15, strategy: str = "uniform") -> float:
-    """Expected calibration error with equal-width (``uniform``) or equal-mass (``quantile``) bins."""
+def ece(prob, labels, n_bins: int = 15) -> float:
+    """Expected calibration error with equal-width bins."""
     prob, labels = _arrays(prob, labels)
-    if strategy == "uniform":
-        edges = np.linspace(0.0, 1.0, n_bins + 1)
-    elif strategy == "quantile":
-        edges = np.quantile(prob, np.linspace(0.0, 1.0, n_bins + 1))
-    else:
-        raise ValueError(strategy)
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
     idx = np.clip(np.searchsorted(edges, prob, side="right") - 1, 0, n_bins - 1)
     total = 0.0
     for b in range(n_bins):

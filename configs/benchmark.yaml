@@ -1,4 +1,4 @@
-# Unified protocol (docs/protocol.md). Single source of truth for backbones, datasets and methods.
+# Unified protocol. Single source of truth for backbones, datasets and methods.
 seed: 0
 max_tokens: 32768          # generation budget; responses without a closed reasoning block are scored incorrect
 samples:                   # K responses per question
@@ -23,7 +23,7 @@ low_parse: 1.0             # pairs with a larger share of unparseable responses 
 # index mod #GPUs). Never reorder; append new datasets at the end so earlier outputs stay valid.
 generation_order: [math500, olympiadbench, minerva, aime, gpqa, math_pool, mmlupro, supergpqa, triviaqa, mixed_pool,
                    math_heldout, gpqa_heldout, mmlupro_heldout, supergpqa_heldout, triviaqa_heldout]
-# Estimators compared with CAPE. The order is the row order of the result tables.
+# Estimators compared with CAPE (the optional baselines). The order is the row order of the result tables.
 methods:
   baselines: [DeepConf, CDG, SelfCertainty, LRMVerbal, CISC, ReasonProbe, SNNE, DeepConf-Vote, ConsistCal, SEP, ORM, SemEnergy,
               DeepConf×SC, CoCoA, Stacker]

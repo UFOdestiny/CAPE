@@ -1,1 +1,1 @@
-"""uqbench: a unified benchmark for response-level uncertainty of reasoning LLMs (see README.md)."""
+"""uqbench: the pipeline that runs and evaluates CAPE on sampled responses of reasoning LLMs (see README.md)."""

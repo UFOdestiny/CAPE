@@ -1,4 +1,5 @@
-"""Coherence of response-level correctness forecasts (docs/method.md §2).
+"""Projection of response-level correctness forecasts onto the coherent set (paper: "Projection with a Brier
+Guarantee").
 
 For one question with K responses, the correctness vector y ∈ {0,1}^K is *coherent*: responses with
 equivalent answers share one label, responses without an extractable answer are incorrect, and at
@@ -13,7 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from baselines.base import Baseline
+from uqbench.estimator import Estimator
 
 
 def _project_capped_simplex(means: np.ndarray, weights: np.ndarray) -> np.ndarray:
@@ -46,13 +47,13 @@ def project_coherent(p: np.ndarray, clusters: list[int], has_answer: np.ndarray)
     return out
 
 
-class CoherentProjection(Baseline):
-    """Wrap a fitted baseline + its Platt map: calibrate, then project onto C (label-free)."""
+class CoherentProjection(Estimator):
+    """Wrap a fitted estimator and its calibration map: calibrate, then project onto C (label-free)."""
 
     probabilistic = True
     main = False
 
-    def __init__(self, inner: Baseline, calibrator):
+    def __init__(self, inner: Estimator, calibrator):
         self.inner, self.calibrator = inner, calibrator
         self.name = f"{inner.name}+Coh"
         self.paper = inner.paper

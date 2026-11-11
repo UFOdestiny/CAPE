@@ -30,7 +30,7 @@ def jobs(datasets: list[str], limit: int) -> list[tuple[int, str, dict, int]]:
     bench = load_yaml("benchmark")
     unknown = set(datasets) - set(bench["generation_order"])
     if unknown:
-        raise ValueError(f"add {sorted(unknown)} to generation_order in uqbench/configs/benchmark.yaml")
+        raise ValueError(f"add {sorted(unknown)} to generation_order in configs/benchmark.yaml")
     out, index = [], 0
     for name in bench["generation_order"]:
         k = bench["samples"]["pool" if name in bench["training_pools"] else "test"]

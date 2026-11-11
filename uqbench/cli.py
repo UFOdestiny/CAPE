@@ -1,4 +1,4 @@
-"""Discoverable command line entry point for the benchmark."""
+"""Discoverable command line entry point of the CAPE pipeline (``python -m uqbench <stage>``)."""
 from __future__ import annotations
 
 import argparse
@@ -6,11 +6,8 @@ import importlib
 import sys
 
 COMMANDS = {
-    'pipeline': ('data', 'generate', 'replay', 'energy', 'followup', 'reward', 'judge', 'evaluate', 'nli'),
-    'studies': ('ablation', 'abstention', 'attribution', 'audit', 'controls', 'decision', 'dependence', 'kscale',
-                'refinement', 'robustness', 'within_question'),
-    'labeling': ('extract', 'regrade'),
-    'reporting': ('report',),
+    'pipeline': ('data', 'generate', 'replay', 'evaluate'),
+    'labeling': ('regrade', 'extract'),
     'blackbox': ('batch',),
 }
 STAGES = {name: f'uqbench.{group}.{name}' for group, names in COMMANDS.items() for name in names}
@@ -18,7 +15,7 @@ STAGES['blackbox-evaluate'] = 'uqbench.blackbox.evaluate'
 
 
 def main() -> None:
-    description = 'Response-level uncertainty benchmark. Available stages:\n' + '\n'.join(
+    description = 'CAPE pipeline. Available stages:\n' + '\n'.join(
         f'  {group}: {", ".join(names)}' for group, names in COMMANDS.items())
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('stage', choices=sorted(STAGES), help='use STAGE --help for stage options')

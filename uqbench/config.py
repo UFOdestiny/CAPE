@@ -1,7 +1,7 @@
 """Shared environment, paths and benchmark settings.
 
 Precedence: process environment > project .env > defaults. Relative project paths
-are anchored to PROJECT_ROOT; CONFIG_DIR defaults to the packaged YAML registry.
+are anchored to PROJECT_ROOT; CONFIG_DIR defaults to the repository's configs/.
 """
 from __future__ import annotations
 
@@ -71,25 +71,23 @@ if not REPO_ROOT.is_absolute():
 REPO_ROOT = REPO_ROOT.resolve()
 
 
-def _path(key: str, default: Path) -> Path:
+def env_path(key: str, default: Path) -> Path:
+    """Path from the environment variable ``key`` (relative paths are anchored to the repository root)."""
     value = os.environ.get(key, '')
     path = Path(value).expanduser() if value else default
     return path if path.is_absolute() else REPO_ROOT / path
 
 
-MODELS_DIR = _path('MODELS_DIR', REPO_ROOT / 'models')
-DATASETS_DIR = _path('DATASETS_DIR', REPO_ROOT / 'datasets')
-OUTPUT_DIR = _path('OUTPUT_DIR', REPO_ROOT / 'outputs')
-RESULTS_DIR = _path('RESULTS_DIR', REPO_ROOT / 'results')
-PAPER_DIR = _path('PAPER_DIR', REPO_ROOT / 'latex')
-PREVIEW_DIR = _path('PREVIEW_DIR', REPO_ROOT / 'artifacts' / 'previews')
-CONFIG_DIR = _path('CONFIG_DIR', PACKAGE_DIR / 'configs')
-BUILD_DIR = _path('BUILD_DIR', REPO_ROOT / 'artifacts' / 'build')
+MODELS_DIR = env_path('MODELS_DIR', REPO_ROOT / 'models')
+DATASETS_DIR = env_path('DATASETS_DIR', REPO_ROOT / 'datasets')
+OUTPUT_DIR = env_path('OUTPUT_DIR', REPO_ROOT / 'outputs')
+RESULTS_DIR = env_path('RESULTS_DIR', REPO_ROOT / 'results')
+CONFIG_DIR = env_path('CONFIG_DIR', REPO_ROOT / 'configs')
 
 # HF resolves its own variables; normalize local cache paths before any HF import.
 for _key in ('HF_HOME', 'HF_HUB_CACHE', 'HF_DATASETS_CACHE'):
     if os.environ.get(_key):
-        os.environ[_key] = str(_path(_key, REPO_ROOT / '.cache' / 'huggingface'))
+        os.environ[_key] = str(env_path(_key, REPO_ROOT / '.cache' / 'huggingface'))
 
 
 def model_path(name: str) -> str:
@@ -140,8 +138,7 @@ def main() -> None:
     # This output is evaluated by scripts/environment.sh, never logged. Secrets are
     # limited to recognized service credentials, rather than dumping the environment.
     paths = {key: str(globals()[key]) for key in (
-        'MODELS_DIR', 'DATASETS_DIR', 'OUTPUT_DIR', 'RESULTS_DIR', 'PAPER_DIR',
-        'PREVIEW_DIR', 'CONFIG_DIR', 'BUILD_DIR')}
+        'MODELS_DIR', 'DATASETS_DIR', 'OUTPUT_DIR', 'RESULTS_DIR', 'CONFIG_DIR')}
     keys = ('HF_HOME', 'HF_HUB_CACHE', 'HF_DATASETS_CACHE', 'HF_TOKEN', 'ANTHROPIC_API_KEY',
             'PYTHON', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS',
             'SLURM_ACCOUNT', 'SLURM_PARTITION')

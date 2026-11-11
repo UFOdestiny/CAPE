@@ -6,9 +6,8 @@ Every record is a dict with keys ``uid, dataset, split, task, question, answer, 
 
 Usage::
 
-    python -m uqbench.pipeline.data            # writes DATASETS_DIR/processed/<name>.jsonl
-    uqbench data --heldout  # further test questions (``*_heldout``, benchmark.yaml: test_union)
-    python -m uqbench.pipeline.data --code     # the code benchmarks and the code pool
+    python -m uqbench.pipeline.data   # writes DATASETS_DIR/processed/<name>.jsonl, including the further test
+                                      # questions (``*_heldout``, benchmark.yaml: test_union) and the training pools
 """
 from __future__ import annotations
 

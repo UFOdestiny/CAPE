@@ -1,12 +1,10 @@
-"""Diagnostics behind the theory (docs/method.md §2), computed from saved scores.
+"""Diagnostics behind the theory, computed from the scored test sets.
 
 For each test set: answer-structure statistics (no-answer rate, clusters per question, unanimous and
-unanimous-wrong rates — the latter lower-bounds the Brier score of any normalized vote — and
-verifier violations of A2), and for each method the share of questions whose calibrated forecast
-violates coherence: unequal scores inside an answer cluster, or cluster masses summing to more
-than 1. Also the label-free Brier certificate of the coherence projection. Called by
-``uqbench.pipeline.evaluate``; results go to ``results/<model>/{answer_structure,coherence_violations,
-certificate}.csv``.
+unanimous-wrong rates — the latter lower-bounds the Brier score of any normalized vote — and the share of questions
+whose correct responses fall into several clusters), the label-free Brier certificate of the projection, and the
+mean confidence on unanimous-correct, unanimous-wrong and split questions. Called by ``uqbench.pipeline.evaluate``;
+results go to ``results/<model>/{answer_structure,certificate,null_mass}.csv``.
 """
 from __future__ import annotations
 
@@ -81,20 +79,3 @@ def null_mass_rows(name: str, questions, prob: np.ndarray, method: str) -> list[
         groups[key].append(float(p.mean()))
     return [{"dataset": name, "method": method, "group": g, "questions": len(v),
              "mean_confidence": float(np.mean(v)) if v else float("nan")} for g, v in groups.items()]
-
-
-def answer_masses(p: np.ndarray, q) -> np.ndarray:
-    """Probability of each answer cluster from a coherent response vector (one value per cluster)."""
-    ids = sorted({c for c, s in zip(q.clusters, q.samples, strict=True) if s["pred"] is not None})
-    return np.array([p[[i for i, c in enumerate(q.clusters) if c == cid]].mean() for cid in ids])
-
-
-def event_scores(p: np.ndarray, qs) -> dict[str, np.ndarray]:
-    """Per-question "none correct" scores of coherent response vectors: residual mass and one minus the top answer."""
-    start, resid, top = 0, [], []
-    for q in qs:
-        m = answer_masses(p[start:start + q.k], q)
-        resid.append(1.0 - m.sum() if len(m) else 1.0)
-        top.append(1.0 - m.max() if len(m) else 1.0)
-        start += q.k
-    return {"residual": np.clip(resid, 0.0, 1.0), "1-top": np.clip(top, 0.0, 1.0)}

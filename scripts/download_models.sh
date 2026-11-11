@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Download model weights into $MODELS_DIR: the backbones (default: the reported backbones in
-# uqbench/configs/benchmark.yaml), the outcome reward model (ORM baseline) and the NLI model (equivalence ablation).
+# Download model weights into $MODELS_DIR: the backbones (default: the reported backbones in configs/benchmark.yaml)
+# and, when the optional baselines/ package is present, the outcome reward model of the ORM baseline.
 # Usage: bash scripts/download_models.sh [qwen3-8b r1-distill-qwen-7b ...]
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -13,6 +13,7 @@ for name in "${names[@]}"; do
   hf download "$hf_id" --local-dir "$MODELS/$path" > /dev/null
   echo "downloaded $hf_id -> $MODELS/$path"
 done
-hf download Skywork/Skywork-Reward-V2-Llama-3.1-8B --local-dir "$MODELS/Skywork-Reward-V2-Llama-3.1-8B" > /dev/null \
-  && echo "downloaded the reward model"
-hf download microsoft/deberta-large-mnli --local-dir "$MODELS/deberta-large-mnli" > /dev/null && echo "downloaded NLI model"
+if [ -d baselines/pipeline ]; then
+  hf download Skywork/Skywork-Reward-V2-Llama-3.1-8B --local-dir "$MODELS/Skywork-Reward-V2-Llama-3.1-8B" > /dev/null \
+    && echo "downloaded the reward model"
+fi

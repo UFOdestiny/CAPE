@@ -1,10 +1,10 @@
 """Score the black-box Haiku run with every method the API permits and report the benchmark metrics.
 
-Without log-probabilities or hidden states the computable methods are the agreement-based ones (SC, SE,
-ConsistCal, SNNE), the verbal-confidence follow-up (LRMVerbal), the outcome reward model on the visible text (ORM)
-and CAPE with API-visible evidence only: the vote prior and ∅ alone, or with the verbal confidence as the response
-evidence g. Fitting, calibration, projection and
-metrics are those of ``uqbench.pipeline.evaluate``; the training pools and test sets are the benchmark's.
+Without log-probabilities or hidden states, CAPE uses API-visible evidence only: the vote prior and ∅ alone, or with
+the verbal confidence as the response evidence g. When ``baselines/`` is present, the computable baselines are
+scored too: the agreement-based ones (SC, SE, ConsistCal, SNNE), the verbal-confidence follow-up (LRMVerbal) and
+the outcome reward model on the visible text (ORM). Fitting, calibration, projection and metrics are those of
+``uqbench.pipeline.evaluate``; the training pools and test sets are the benchmark's.
 
 Usage::
 
@@ -19,14 +19,13 @@ import argparse
 import numpy as np
 import pandas as pd
 
-from baselines import ORM, SC, SE, SNNE, ConsistCal, LRMVerbal
-from baselines.base import Baseline, labels_of
 from cape import CoherentProjection
 from cape.model import AnswerModel
 from uqbench.calibration import Identity, select_calibrator
 from uqbench.config import load_yaml, run_dir
-from uqbench.pipeline.evaluate import evaluate_split
-from uqbench.records import load_questions
+from uqbench.estimator import Estimator
+from uqbench.pipeline.evaluate import baselines_package, evaluate_split
+from uqbench.records import labels_of, load_questions
 
 VERBAL_FALLBACK = 0.5
 SINGLE = ("LRMVerbal", "ORM")
@@ -57,7 +56,7 @@ class APIAnswerModel(AnswerModel):
                 "b": float(self.params["b"]), "val_nll": self.val_nll}
 
 
-class CAPEAPI(Baseline):
+class CAPEAPI(Estimator):
     paper = "ours"
     probabilistic = True
 
@@ -78,6 +77,16 @@ class CAPEAPI(Baseline):
         return self.model.describe()
 
 
+def blackbox_baselines(pool) -> list:
+    """The baselines computable from the API's text output (none when ``baselines/`` is absent)."""
+    b = baselines_package()
+    if b is None:
+        return []
+    # the outcome reward model reads the visible responses (its GPU stage is part of baselines/); included once run
+    single = [b.LRMVerbal()] + ([b.ORM()] if all(len(q.reward) == q.k for q in pool) else [])
+    return [*single, b.SNNE(), b.ConsistCal(), b.SC(), b.SE()]
+
+
 def load(model: str, name: str):
     return load_questions(model, name, with_replay=False, with_followup=True, partial=True)
 
@@ -96,10 +105,8 @@ def main() -> None:
     if args.pilot:
         train = val = pool
     print(f"[blackbox] pool: {len(train)} train / {len(val)} val questions")
-    # the outcome reward model reads the visible responses (GPU stage uqbench.pipeline.reward); included once it has run
-    single = [LRMVerbal()] + ([ORM()] if all(len(q.reward) == q.k for q in pool) else [])
-    methods = [*single, SNNE(), ConsistCal(), SC(), SE(),
-               CAPEAPI(verbal=False, name="CAPE (votes + ∅)"), CAPEAPI(verbal=True, name="CAPE (+ verbal)")]
+    methods = blackbox_baselines(pool) + [CAPEAPI(verbal=False, name="CAPE (votes + ∅)"),
+                                          CAPEAPI(verbal=True, name="CAPE (+ verbal)")]
     y_val = labels_of(val)
     groups = np.repeat([q.uid for q in val], [q.k for q in val])
     calibrators, describe = {}, {}

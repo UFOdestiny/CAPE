@@ -1,1 +1,1 @@
-"""Benchmark stages: data preparation, GPU inference stages, answer-set judge, NLI clusters and evaluation."""
+"""Pipeline stages: data preparation, sampling, teacher-forced replay and evaluation."""
