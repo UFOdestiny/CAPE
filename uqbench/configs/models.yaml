@@ -1,0 +1,72 @@
+# Backbone registry. Decoding follows each model card's recommendation.
+#   name              display name in tables and figures
+#   hf_id             HuggingFace repo id, downloaded by scripts/download_models.sh into MODELS_DIR/<path>
+#   path              folder under MODELS_DIR
+#   chat_template_kwargs, sampling, max_model_len   chat template switches, vLLM sampling parameters, context length
+#   reasoning_format  think (reasoning inside <think>...</think>) | harmony (gpt-oss channels)
+#                     | none (instruction-tuned model answering with a plain chain of thought)
+#   replay            optional {attn_implementation, chunk} for models without a flash-attention kernel
+#   max_tokens        optional per-model generation budget (default: benchmark.yaml)
+#   seed_offset       optional offset of the per-question sampling seeds (independent extra samples)
+#   prefix            optional {of, fraction}: shared-prefix sampling (uqbench.pipeline.generate.shared_prefixes)
+
+# --- Backbones reported in the paper (uqbench/configs/benchmark.yaml: backbones) ---
+qwen3-8b:
+  name: Qwen3-8B
+  hf_id: Qwen/Qwen3-8B
+  path: Qwen3-8B
+  chat_template_kwargs: {enable_thinking: true}
+  sampling: {temperature: 0.6, top_p: 0.95, top_k: 20}
+  max_model_len: 40960
+  reasoning_format: think
+r1-distill-qwen-7b:
+  name: R1-Distill-7B
+  hf_id: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+  path: DeepSeek-R1-Distill-Qwen-7B
+  chat_template_kwargs: {}
+  sampling: {temperature: 0.6, top_p: 0.95}
+  max_model_len: 40960
+  reasoning_format: think
+gpt-oss-20b:
+  name: gpt-oss-20b
+  hf_id: openai/gpt-oss-20b
+  path: gpt-oss-20b
+  chat_template_kwargs: {reasoning_effort: medium}  # template default; its system prompt stamps today's date
+  sampling: {temperature: 1.0, top_p: 1.0}          # OpenAI recommendation
+  max_model_len: 40960
+  reasoning_format: harmony
+  replay: {attn_implementation: eager, chunk: 2048} # attention sinks: no flash-attention kernel
+
+# --- Second sampling run of Qwen3-8B (responses 9-16 of the K = 16 study, uqbench.studies.kscale) ---
+qwen3-8b-x8:
+  name: Qwen3-8B (seed 2)
+  hf_id: Qwen/Qwen3-8B
+  path: Qwen3-8B
+  chat_template_kwargs: {enable_thinking: true}
+  sampling: {temperature: 0.6, top_p: 0.95, top_k: 20}
+  max_model_len: 40960
+  reasoning_format: think
+  seed_offset: 1000000
+
+# --- Shared-prefix sampling (dependence study, uqbench.studies.dependence): every response continues
+# the first response of the `of` run after `fraction` x the median length of its other responses (an exact model sample) ---
+qwen3-8b-pf25: &prefix
+  name: Qwen3-8B (shared prefix 25%)
+  hf_id: Qwen/Qwen3-8B
+  path: Qwen3-8B
+  chat_template_kwargs: {enable_thinking: true}
+  sampling: {temperature: 0.6, top_p: 0.95, top_k: 20}
+  max_model_len: 40960
+  reasoning_format: think
+  seed_offset: 2000000
+  prefix: {of: qwen3-8b, fraction: 0.25}
+qwen3-8b-pf50:
+  <<: *prefix
+  name: Qwen3-8B (shared prefix 50%)
+  seed_offset: 3000000
+  prefix: {of: qwen3-8b, fraction: 0.5}
+qwen3-8b-pf75:
+  <<: *prefix
+  name: Qwen3-8B (shared prefix 75%)
+  seed_offset: 4000000
+  prefix: {of: qwen3-8b, fraction: 0.75}

@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+.vscode/
+.claude/
+.agents/
+/datasets/
+/models
+/results/
+/artifacts/
+*.log
+/latex/
+/docs/paper/
+/notes/
+/MySKILL/

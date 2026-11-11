@@ -1,0 +1,37 @@
+# Unified protocol (docs/protocol.md). Single source of truth for backbones, datasets and methods.
+seed: 0
+max_tokens: 32768          # generation budget; responses without a closed reasoning block are scored incorrect
+samples:                   # K responses per question
+  test: 8
+  pool: 4                  # training pools
+test_sets: [math500, math_rest, olympiadbench, minerva, aime, gpqa, gpqa_ext, mmlupro, supergpqa, triviaqa]
+math_sets: [math500, math_rest, olympiadbench, minerva, aime]   # pooled (response-weighted) into `math_all`
+# Test sets made of several generated datasets (question ids stay unique: they carry the generated name). A test
+# set without an entry is the generated dataset of the same name. GPU stages run on generated datasets.
+test_union:
+  math_rest: [math_heldout]                     # MATH test problems outside MATH-500
+  gpqa_ext: [gpqa_heldout]                      # GPQA-Extended outside Diamond
+  mmlupro: [mmlupro, mmlupro_heldout]
+  supergpqa: [supergpqa, supergpqa_heldout]
+  triviaqa: [triviaqa, triviaqa_heldout]
+pool: math_pool            # the MATH pool alone (answer-set judge study)
+training_pools: [math_pool, mixed_pool]   # question-level train/val splits; every learned method and calibration map is fitted here
+backbones: [qwen3-8b, r1-distill-qwen-7b, gpt-oss-20b]   # reported in the paper
+ablation_backbone: qwen3-8b
+low_parse: 1.0             # pairs with a larger share of unparseable responses would be left out; 1.0 keeps every pair (unparseable = wrong)
+# Canonical order defining each question's job index (sampling seed = seed + index; GPU shard =
+# index mod #GPUs). Never reorder; append new datasets at the end so earlier outputs stay valid.
+generation_order: [math500, olympiadbench, minerva, aime, gpqa, math_pool, mmlupro, supergpqa, triviaqa, mixed_pool,
+                   math_heldout, gpqa_heldout, mmlupro_heldout, supergpqa_heldout, triviaqa_heldout]
+# Estimators compared with CAPE. The order is the row order of the result tables.
+methods:
+  baselines: [DeepConf, CDG, SelfCertainty, LRMVerbal, CISC, ReasonProbe, SNNE, DeepConf-Vote, ConsistCal, SEP, ORM, SemEnergy,
+              DeepConf×SC, CoCoA, Stacker]
+  references: [SC, SE]                  # same K responses and answer clusters as CAPE
+  constructed: [DeepConf×SC, Stacker]   # simple fusions built as controls, not published methods
+  single_response: [DeepConf, SelfCertainty, ReasonProbe, LRMVerbal, CDG, SEP, ORM]   # score each response on its own
+replay:
+  layer_stride: 4          # hidden states kept for layers 0, 4, 8, ..., and the last layer
+  topk: 20                 # DeepConf/CDG token confidence uses top-20 log-probs
+bootstrap: 2000
+ece_bins: 15

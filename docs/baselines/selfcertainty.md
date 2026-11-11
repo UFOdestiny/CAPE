@@ -1,0 +1,60 @@
+# SelfCertainty: Scalable Best-of-N Selection for Large Language Models via Self-Certainty
+
+> This note records a reading of the original paper and official implementation; for the adaptation and settings currently used in this repo, see the [experiment protocol](../protocol.md).
+- Paper: NeurIPS 2025 (39th Conference on NeurIPS; stated on the paper's first page), arXiv:2502.18581, https://arxiv.org/abs/2502.18581 ; Zhewei Kang*, Xuandong Zhao*†, Dawn Song (UC Berkeley; * equal contribution)
+- Official code: https://github.com/backprop07/Self-Certainty (no LICENSE file, GitHub does not recognize a license; Python + HF transformers/PyTorch, as an extension of ZeroEval (`cp -r Self-Certainty/src/* ZeroEval/src/`); usable: `src/confidence_list.py` is the core scoring script, and it also contains Borda voting `voting_from_list.py`, USC, and LiveCodeBench/CRUXEval/MATH evaluation tools; last push 2025-05-31 (commit "Support Parquet input files and allow specifying input/output field names"); about 38 stars)
+- Category: single-trajectory logit (full-vocab distribution type, not sampled-token probability type); the paper uses it for Best-of-N internal ranking/selection, not for cross-question correctness estimation
+- Access requirements: white-box/gray-box, needs the **full-vocab** distribution at every generated position (the official code does one teacher-forcing forward over prompt+response and takes the full logits through log_softmax); no training, no extra model; it cannot be reproduced exactly with top-k logprobs (see §6)
+
+## 1. Method design
+- Core idea: measure how far the next-token distribution at each generated position is from the uniform distribution; the "peakier", the more certain. Averaging this over all tokens of the response gives a response-level confidence.
+- Token-wise definition (§3.3 Eq. 5): C_i^KL := KL(U ‖ p(·|x, y_{≤i})) = Σ_j (1/V) log( (1/V) / p_j ) = −(1/V) Σ_{j=1..V} log(V · p_j). Note the direction is KL(U‖p) (uniform first), not KL(p‖U). V is the vocabulary size, and the **sum runs over the whole vocabulary**.
+- Response-level (§3.4 Eq. 9, Eq. 4 taking the mean): Self-Certainty = −(1/(nV)) Σ_{i=1..n} Σ_{j=1..V} log(V · p(j | x, y_{<i})), where n is the number of tokens in the response. The paper's formula writes the subscript y_{≤i} (inconsistent with the README's y_{<i}; the actual meaning is the predictive distribution at step i, conditioned on x and the first i−1 tokens). Official README formula: −(1/(nV)) ΣΣ log(V·p(j|x,y_{<i})).
+- Equivalent form (my derivation, not given in the paper): with logits z, SC_i = logsumexp(z) − mean_j(z_j) − log V, i.e. "the difference between logsumexp and the full-vocabulary mean logit", independent of the token actually sampled. The official implementation is exactly `conf = -1/V * Σ_j log_softmax − log V` (`confidence_logprob_sum`).
+- Appendix A.1: proves that when doing log-likelihood gradient ascent on the target token, SC(p)=KL(U‖p) increases (to first order) if and only if p_{y*} > ‖p‖₂²; the argmax token always satisfies this condition.
+- Other measures compared (§3.3): AvgLogP/Perplexity, Gini (Σp²), negative Entropy, Distributional Perplexity (DP) = −exp(H). Appendix B.4 also tries replacing U with the empirical token distribution of the training set (MATH flat, GSM8K drops; keeping U is recommended).
+- Scoring target: **scores one specific response** (the token distributions come from the path along which that response was sampled); the output is an unbounded real number (about 10~20 on Llama-3.1-8B, Fig. 1), not a probability; larger means more certain. Figure 5: essentially independent of response length (other measures correlate positively with length).
+- Accompanying Borda voting (§4 Eq. 11): rank the N samples by SC; the sample at rank r (1 = highest confidence) casts v(r) = (N − r + 1)^p votes for its final answer, and the answer with the most votes wins; p=0 reduces to majority voting, and p→∞ reduces to pure SC selection. Recommended p=0.3 (N≤16), p=1.2 (N≥32), tuning p on a "few hundred" validation queries. Borda needs an extractable final answer, which **this project's correctness estimation does not need**.
+
+## 2. Dataset settings
+- Math reasoning: LiveBench-Math (White et al., 2024, chosen because "released after the models" to reduce contamination), GSM8K (the paper writes "validation set of GSM8K"), MATH (test set; Level 3/4/5 subsets are also used for difficulty analysis and the R1-distill experiments).
+- Code reasoning: CRUXEval-O (predict Python program output); code generation: LiveCodeBench (open-ended, self-consistency does not apply).
+- Number of samples per dataset: not reported (the paper only says N candidate responses, five repetitions).
+- Answer format: for math, the model outputs JSON `{"reasoning": ..., "answer": ...}` (Appendix C example; ZeroEval framework). Responses without an extractable answer are masked (SC set to −∞, see README).
+- Correctness: answer matching (ZeroEval's evaluation); for code, by test cases. The specific math equivalence rule is not detailed in the paper.
+
+## 3. Experimental protocol
+- The method has no training part and no train/val/test split (the Borda p is tuned on a small number of validation queries).
+- 64 responses sampled per question (temperature=0.6, top-p=0.9, §5.1), then subsets N = 4, 8, 16, 32, 64 are taken for Best-of-N; all measures are compared on the same set of samples; the FirstAns baseline takes the first extractable answer; each result is averaged over five repetitions (the R1-distill experiments and some appendix experiments are single runs). max tokens: not reported.
+- Prompt: CoT, JSON-format output (except code generation). The USC baseline uses the template from the original paper, GRM-Llama3.2-3B-RewardModel-FT as ORM and Qwen2.5-Math-PRM-7B as PRM.
+- Metric: Best-of-N **selection accuracy** (accuracy of the selected answer). **The paper does not report correctness-estimation metrics such as AUROC / ECE / AURC**; Figure 1 only gives SC histograms for three classes, correct/incorrect/no-answer (MATH Level 4, Llama-3.1-8B-Instruct, 64 samples/question).
+- Statistics: average over five repetitions; no standard deviation/significance test reported (no variance in Table 1).
+- Compute: no extra inference ("the distribution is produced together with the tokens"); the official script recomputes logits post hoc by teacher forcing (A100).
+
+## 4. LLM backbone settings
+- Main model: Llama-3.1-8B-Instruct (Dubey et al., 2024).
+- Reasoning model: DeepSeek-R1-Distill-Llama-8B (only MATH Level 3, single trial, Table 3).
+- Code: Qwen-2.5-Coder-32B-Instruct (LiveCodeBench, compared with USC).
+- Precision/framework: the official `confidence_list.py` loads in float16 and runs the forward under bfloat16 autocast, HF transformers; generation and evaluation framework ZeroEval. Context length: not reported.
+
+## 5. Main results and conclusions (brief, key numbers)
+- Table 1 (Llama-3.1-8B-Instruct, average Avg over 6 settings): Greedy 46.02; FirstAns 47.94; Perplexity 51.08; USC 51.19; Self-consistency 56.15; Self-certainty 52.71; Borda(p=0.3/0.7/1.2/2.0) 56.48/56.49/56.51/55.67. Example: MATH N=64: Perplexity 51.96, SC 56.70, Self-consistency 63.40, Borda(p=1.2) 64.10.
+- SC selection alone beats perplexity/greedy/FirstAns, but on math problems with a definite answer it is **below majority voting** (MATH N=64: 56.70 vs 63.40); only combined with answer voting (Borda) does it exceed self-consistency.
+- Figure 4 (LiveBench-Math): KL keeps improving with N after N≥16, while the other measures saturate/decline after N=16. Figure 5: SC is approximately insensitive to response length; perplexity favors long/no-answer responses. Fig. 10: the average SC decreases as MATH difficulty increases.
+- Table 3 (R1-Distill-Llama-8B, MATH L3, single run): Greedy 77.54; Self-certainty N=4/16/64 = 83.29/83.73/84.08; Self-consistency 83.64/86.47/87.62; Borda(p=1.2) 84.62/87.00/88.06. On long-CoT reasoning models, SC selection alone is clearly weaker than majority voting.
+- Theory: Theorem A.1 (see §1).
+
+## 6. Fit to this project's unified benchmark
+- Applicability: SC itself is a training-free, single-trajectory, response-level real-valued score that can be used directly as a correctness ranking score (AUROC/AURC). But the original paper only validates "ranking multiple samples within the same question" and **does not validate cross-question AUROC**; across questions SC is strongly correlated with question difficulty (Fig. 10), so it can be seen as a mixed "difficulty + certainty" signal, and it must be labelled honestly as "not a use made in the original paper". The evidence on R1-distill is only a single MATH L3 trial.
+- **What a top-k proxy loses (key)**: vLLM returns only the top-k (k≈20) logprobs. SC = −log V − (1/V)Σ_{j=1..V} log p_j, where the k top tokens have a weight of only k/V (about 1.3e-4 when V≈152k), so the whole value is determined almost entirely by "the average log probability of the tail ~V−k tokens" (SC≈17 in Fig. 1 corresponds to a vocabulary-average log p of about −29; this value is my rough estimate based on V=128k). The tail log p depends on the shape of the truncated logit distribution, which **cannot be recovered from top-k logprobs**.
+  - Given the top-k probability sum s_k, Jensen (log is concave) gives a lower bound on SC (my derivation): SC ≥ −log V − (1/V)[Σ_top log p + (V−k)·log((1−s_k)/(V−k))] ≈ −log(1−s_k) (negative log of the tail mass); equality holds if and only if the tail is uniform. This bound only reflects the "tail probability mass", differs greatly from the true SC, and cannot be used as SC.
+  - Therefore any "top-k approximation of KL(U‖p)" or "KL/entropy/mean logprob within the top-k" is a **different statistic** and must be named a proxy (e.g. SC-topk / tail-mass); it must not be labelled as the original SelfCertainty method.
+- Faithful implementation suggestion: run one teacher-forcing forward per response (HF, or add a hook on the generation logits in vLLM), compute `logsumexp(z) − mean(z) − log V` per position in fp32, store only the per-token scalar, then average over the response. Extra cost: one prefill forward over prompt + the full response length per trajectory (no extra generation); the logits tensor is (T × V), so long CoTs of 16–32K tokens need chunking (about 0.6 MB/token in fp32 for Qwen3 with V=151,936). No extra model needed.
+- Implementation pitfalls (from reading the official code; please re-check):
+  1. The official code uses `llm.config.vocab_size` as V (includes padding rows; the Qwen3 logits dimension is 151,936 while the tokenizer's actual vocabulary is smaller), and the logits of the padding rows enter mean(z); one convention must be fixed and recorded.
+  2. The slice `logits[:, input_length:, :]` is shifted right by one relative to "the position that predicts the first response token (input_length−1)", i.e. it misses the distribution of the first response token and takes one extra distribution after the last token; the effect on long CoTs is tiny but it is not strictly aligned.
+  3. The official code decodes and then re-tokenizes the response (`add_special_tokens=False`), which may disagree with the token ids actually generated by vLLM; this project should teacher-force the generated token ids directly.
+  4. In the length-grouping code the branch `elif len(text) > 6*1024` is unreachable (`>3*1024` is checked first); it only affects the batch size.
+  5. The paper's formula subscript y_{≤i} is inconsistent with the README's y_{<i}; it should be taken as "the predictive distribution of the i-th token".
+- Evaluation split: no training, so score all trajectories of the test set directly; if the Borda/weighted-voting version is also reported, it must be done on math_verify answer-equivalence clusters (merging "identical final answers"), and p must be tuned on an independent validation set, not on the test set.
+- Recommended settings: average over the full response (including the thinking part); additionally report an "final-answer segment only" variant as an ablation; report the correlation with length.
